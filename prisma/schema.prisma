@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String           @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt  DateTime         @default(now())
+  email      String           @unique
+  username   String           @unique
+  password   String
+  role       ROLES            @default(BASIC)
+  categories CustomCategory[]
+  accounts   Account[]
+  payee      Payee[]
+  Tag        Tag[]
+}
+
+model Account {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  name        String        @unique
+  balance     Float         @default(0.00)
+  currency    CURRENCY      @default(UAH)
+  isCredit    Boolean       @default(false)
+  icon        ACCOUNT_ICON  @default(BILL)
+  createdAt   DateTime      @default(now())
+  userId      String        @db.ObjectId
+  user        User          @relation(fields: [userId], references: [id])
+  Transaction Transaction[]
+
+  @@unique([userId, name], name: "AccountIdentifier")
+}
+
+model TotalBalance {
+  id    String @id @default(auto()) @map("_id") @db.ObjectId
+  total Float  @default(0.00)
+}
+
+model CustomCategory {
+  id     String        @id @default(auto()) @map("_id") @db.ObjectId
+  type   CATEGORY_TYPE @default(CUSTOM)
+  name   String
+  user   User          @relation(fields: [userId], references: [id])
+  userId String        @db.ObjectId
+
+  @@unique([userId, name], name: "CustomCategoryIdentifier")
+}
+
+model Category {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  type        CATEGORY_TYPE @default(DEFAULT)
+  name        String
+  transaction Transaction[]
+}
+
+model Payee {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  user        User          @relation(fields: [userId], references: [id])
+  userId      String        @db.ObjectId
+  transaction Transaction[]
+
+  @@unique([userId, name], name: "PayeeIdentifier")
+}
+
+model Tag {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  user          User         @relation(fields: [userId], references: [id])
+  userId        String       @db.ObjectId
+  Transaction   Transaction? @relation(fields: [transactionId], references: [id])
+  transactionId String?      @db.ObjectId
+
+  @@unique([userId, name], name: "TagIdentifier")
+}
+
+model Transaction {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  amount      Float     @default(0)
+  description String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  payee       Payee?    @relation(fields: [payeeId], references: [id])
+  Tag         Tag[]
+  date        DateTime
+  account     Account   @relation(fields: [accountId], references: [id])
+  accountId   String    @db.ObjectId
+
+  categoryId String? @db.ObjectId
+  payeeId    String? @db.ObjectId
+}
+
+enum ROLES {
+  BASIC
+  ADMIN
+}
+
+enum CURRENCY {
+  UAH
+  USD
+  EUR
+  BTC
+  ETH
+}
+
+enum ACCOUNT_ICON {
+  BANK
+  CARD
+  MONEY
+  BILL
+  SAVINGS
+  WALLET
+  USD
+  EUR
+  BTC
+  PAYMENTS
+  SHOPPING
+  TRAVEL
+}
+
+enum CATEGORY_TYPE {
+  DEFAULT
+  CUSTOM
+}
