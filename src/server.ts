@@ -3,15 +3,15 @@ import morgan from 'morgan';
 import cors from 'cors';
 
 import config from './config';
-// import router from './router';
-// import { protectMiddleware } from './modules/auth';
-// import { userHandlers, userValidators } from './handlers/users';
-// import {
-//   catchError,
-//   errorLogger,
-//   handleInputErrors,
-//   invalidPathHandler,
-// } from './modules/middleware';
+import router from './router';
+import { protectMiddleware } from './lib/auth';
+import { userHandlers, userValidators } from './handlers/users';
+import {
+  catchError,
+  errorLogger,
+  handleInputErrors,
+  invalidPathHandler,
+} from './lib/middleware';
 
 const app = express();
 
@@ -29,5 +29,23 @@ app.get('/', (req: Request, res, next) => {
     next(error);
   }
 });
+
+app.use('/api', protectMiddleware, router);
+app.post(
+  '/user',
+  userValidators.createUser,
+  handleInputErrors,
+  userHandlers.createNewUser,
+);
+app.post(
+  '/signin',
+  userValidators.signIn,
+  handleInputErrors,
+  userHandlers.signIn,
+);
+
+app.use(invalidPathHandler);
+app.use(errorLogger);
+app.use(catchError);
 
 export default app;
