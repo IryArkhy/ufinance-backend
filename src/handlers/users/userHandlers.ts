@@ -9,9 +9,14 @@ import {
   hashPassword,
   RequestWithUser,
 } from '../../lib/auth';
+import { createDefaultCategories } from '../../lib/categories';
 import { CustomError, PrismaClientErrorCodes } from '../../types';
 
-import { CreateUserRequestBody, SignInRequestBody } from './types';
+import {
+  CreateUserRequestBody,
+  SignInRequestBody,
+  UpdatePasswordReqBody,
+} from './types';
 
 export const createNewUser = async (
   req: Request<never, never, CreateUserRequestBody, never>,
@@ -32,8 +37,14 @@ export const createNewUser = async (
       userData.role = body.role;
     }
 
-    const user = await prisma.user.create({
-      data: userData,
+    const user = await prisma.$transaction(async tx => {
+      const newUser = await tx.user.create({
+        data: userData,
+      });
+
+      await createDefaultCategories(newUser.id, tx);
+
+      return newUser;
     });
 
     const token = createJWT({ id: user.id, role: user.role });
@@ -89,45 +100,6 @@ export const signIn = async (
   }
 };
 
-export const getUsers = async (
-  req: RequestWithUser<any, any, any, { offset?: string; limit?: string }>,
-  res: Response,
-  next: NextFunction,
-) => {
-  try {
-    const { query } = req;
-    const { offset = 0, limit = 20 } = query;
-
-    const users = await prisma.user.findMany({
-      skip: +offset,
-      take: +limit,
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        createdAt: true,
-      },
-    });
-
-    const count = await prisma.user.count();
-
-    res.status(200);
-    const newOffset = +offset + +limit;
-
-    res.json({
-      users,
-      count: count,
-      limit,
-      offset: newOffset === count ? null : newOffset,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const getUser = async (
   req: RequestWithUser,
   res: Response,
@@ -143,6 +115,43 @@ export const getUser = async (
     const { password, ...rest } = user;
 
     res.status(200).json({ user: rest });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updatePassword = async (
+  req: RequestWithUser<any, any, UpdatePasswordReqBody>,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const user = await prisma.user.findUniqueOrThrow({
+      where: {
+        id: req.user.id,
+      },
+    });
+
+    const isValid = await comparePasswords(req.body.oldPassword, user.password);
+
+    if (!isValid) {
+      return res.status(401).json({ message: 'Validation error.' });
+    }
+
+    await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        password: await hashPassword(req.body.newPassword),
+      },
+    });
+    const token = createJWT({ id: user.id, role: user.role });
+
+    res.status(200).json({
+      message: 'Password is updated',
+      token,
+    });
   } catch (error) {
     next(error);
   }

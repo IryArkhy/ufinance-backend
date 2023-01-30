@@ -8,3 +8,8 @@ export const createUser = [
 ];
 
 export const signIn = [body('email').isEmail(), body('password').isString()];
+
+export const updateUserPassword = [
+  body('newPassword').isStrongPassword(),
+  body('oldPassword').isString(),
+];
