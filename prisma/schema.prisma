@@ -76,20 +76,20 @@ model Tag {
 }
 
 model Transaction {
-  id          String             @id @default(auto()) @map("_id") @db.ObjectId
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  amount      Float              @default(0)
-  description String?
-  date        DateTime
-  category    Category?          @relation(fields: [categoryId], references: [id])
-  payee       Payee?             @relation(fields: [payeeId], references: [id])
-  user        User               @relation(fields: [userId], references: [id])
-  type        TRANSACTION_TYPE   @default(WITHDRAWAL)
-  tags        TagOnTransaction[]
-  isTransfer  Boolean            @default(false)
-  fromAccount Account            @relation(fields: [fromAccountId], references: [id], name: "fromAccount")
-  toAccount   Account?           @relation(fields: [toAccountId], references: [id], name: "toAccount")
+  id              String             @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  amount          Float              @default(0)
+  toAccountAmount Float?             @default(0)
+  description     String?
+  date            DateTime
+  category        Category?          @relation(fields: [categoryId], references: [id])
+  payee           Payee?             @relation(fields: [payeeId], references: [id])
+  user            User               @relation(fields: [userId], references: [id])
+  type            TRANSACTION_TYPE   @default(WITHDRAWAL)
+  tags            TagOnTransaction[]
+  fromAccount     Account            @relation(fields: [fromAccountId], references: [id], name: "fromAccount")
+  toAccount       Account?           @relation(fields: [toAccountId], references: [id], name: "toAccount")
 
   userId             String               @db.ObjectId
   fromAccountId      String               @db.ObjectId

@@ -54,7 +54,9 @@ router.delete('/accounts/:id', accountHandlers.deleteAccount);
 
 router.get('/transactions/:accountId');
 router.post('/transactions'); //Update balance
-router.patch('/transactions/:accountId/:id'); //Update balance
+router.post('/transactions/transfer'); //Update balance
+router.put('/transactions/:id'); //Update balance
+router.put('/transactions/transaction/:id'); //Update balance
 router.delete('/transactions/:accountId/:id'); //Update balance
 
 /**
