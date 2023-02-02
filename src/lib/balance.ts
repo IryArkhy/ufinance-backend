@@ -45,7 +45,9 @@ export const updateTotalBalance = async (
   });
 
   const convertedBalances = await Promise.all(
-    allAccounts.map(account => convertToUSD(account.currency, account.balance)),
+    allAccounts
+      .filter(a => a.balance > 0)
+      .map(account => convertToUSD(account.currency, account.balance)),
   );
 
   if (convertedBalances.includes(null)) {

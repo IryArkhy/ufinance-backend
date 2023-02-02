@@ -2,7 +2,6 @@ import { Router } from 'express';
 
 import {
   catchError,
-  checkUserRole,
   errorLogger,
   handleInputErrors,
   invalidPathHandler,
@@ -15,6 +14,11 @@ import {
 } from './handlers/categories';
 import { payeesHandlers, payeesValidators } from './handlers/payees';
 import { tagsHandlers, tagsValidators } from './handlers/tags';
+import {
+  transactionHandlers,
+  transactionValidators,
+} from './handlers/transactions';
+import { insightsHandlers } from './handlers/insights';
 
 const router = Router();
 
@@ -52,12 +56,42 @@ router.delete('/accounts/:id', accountHandlers.deleteAccount);
  * Transactions
  */
 
-router.get('/transactions/:accountId');
-router.post('/transactions'); //Update balance
-router.post('/transactions/transfer'); //Update balance
-router.put('/transactions/:id'); //Update balance
-router.put('/transactions/transaction/:id'); //Update balance
-router.delete('/transactions/:accountId/:id'); //Update balance
+router.get(
+  '/transactions/:accountId',
+  transactionHandlers.getTransactionsByAccount,
+);
+router.post(
+  '/transactions',
+  transactionValidators.createTransaction,
+  handleInputErrors,
+  transactionHandlers.createTransaction,
+); //Update balance
+router.post(
+  '/transactions/transfer',
+  transactionValidators.createTransfer,
+  handleInputErrors,
+  transactionHandlers.createTransfer,
+); //Update balance
+router.put(
+  '/transactions/:id',
+  transactionValidators.updateTransaction,
+  handleInputErrors,
+  transactionHandlers.updateTransaction,
+); //Update balance
+router.put(
+  '/transactions/transaction/:id',
+  transactionValidators.updateTransfer,
+  handleInputErrors,
+  transactionHandlers.updateTransfer,
+); //Update balance
+router.delete(
+  '/transactions/:accountId/:id',
+  transactionHandlers.deleteTransaction,
+); //Update balance
+router.delete(
+  '/transactions/transfer/:accountId/:id',
+  transactionHandlers.deleteTransfer,
+); //Update balance
 
 /**
  * Categories
@@ -96,7 +130,7 @@ router.delete('/tags/:id', tagsHandlers.deleteTag);
 /**
  * Insights
  */
-router.get('/insights/balance');
+router.get('/insights/balance', insightsHandlers.getUserBalance);
 router.get('/insights/currentMonth/balance');
 router.get('/insights/currentMonth/overview');
 router.get('/insights/currentMonth/statistics');

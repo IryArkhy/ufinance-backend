@@ -27,11 +27,17 @@ export const createPayees = async (
   next: NextFunction,
 ) => {
   try {
-    const payees = await prisma.payee.createMany({
+    await prisma.payee.createMany({
       data: req.body.payees.map(c => ({
         name: c,
         userId: req.user.id,
       })),
+    });
+
+    const payees = await prisma.payee.findMany({
+      where: {
+        userId: req.user.id,
+      },
     });
 
     res.status(201).json({ payees });

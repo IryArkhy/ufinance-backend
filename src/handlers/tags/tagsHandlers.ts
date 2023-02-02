@@ -27,11 +27,17 @@ export const createTags = async (
   next: NextFunction,
 ) => {
   try {
-    const tags = await prisma.tag.createMany({
+    await prisma.tag.createMany({
       data: req.body.tags.map(c => ({
         name: c,
         userId: req.user.id,
       })),
+    });
+
+    const tags = await prisma.tag.findMany({
+      where: {
+        userId: req.user.id,
+      },
     });
 
     res.status(201).json({ tags });

@@ -3,7 +3,7 @@ import { AccountIcons, Currency } from './types';
 
 export const createAccount = [
   body('name').isString(),
-  body('balance').isNumeric(),
+  body('balance').isFloat().toFloat(),
   body('isCredit').isBoolean(),
   body('currency').isIn(Currency),
   body('icon').isIn(AccountIcons),

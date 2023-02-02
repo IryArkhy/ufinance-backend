@@ -1,10 +1,10 @@
-import { Account, Prisma, PrismaClient, UserBalance } from '@prisma/client';
+import { Account, Prisma, UserBalance } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime';
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Response } from 'express';
 
 import { prisma } from '../../db';
 import { RequestWithUser } from '../../lib/auth';
-import { convertToUSD } from '../../lib/currencyApi';
+import { updateTotalBalance } from '../../lib/balance';
 import { CustomError, PrismaClientErrorCodes } from '../../types';
 
 import { CreateAccountRequestBody, UpdateAccountRequestBody } from './types';
@@ -48,88 +48,37 @@ export const createAccount = async (
     const { userBalance, newAccount } = await prisma.$transaction<{
       userBalance: UserBalance;
       newAccount: Account;
-    }>(async (tx: Prisma.TransactionClient) => {
-      const newAccount = await tx.account.create({
-        data: {
-          userId: req.user.id,
-          name: body.name,
-          balance: body.balance,
-          currency: body.currency,
-          isCredit: body.isCredit,
-          icon: body.icon,
-        },
-      });
-
-      const allAccounts = await tx.account.findMany({
-        where: {
-          userId: req.user.id,
-        },
-        select: {
-          id: true,
-          balance: true,
-          currency: true,
-          userId: true,
-        },
-      });
-
-      const convertedBalances = await Promise.all(
-        allAccounts.map(account =>
-          convertToUSD(account.currency, account.balance),
-        ),
-      );
-
-      if (convertedBalances.includes(null)) {
-        throw new Error('Failed to convert acounts balances');
-      }
-
-      const totalBalanceInUsd = convertedBalances.reduce(
-        (balance, res) => (balance += res.data.USD.value),
-        0,
-      );
-
-      const userBalance = await tx.userBalance.upsert({
-        where: {
-          BalanceUpdateIdentifier: {
+    }>(
+      async (tx: Prisma.TransactionClient) => {
+        const newAccount = await tx.account.create({
+          data: {
             userId: req.user.id,
-            year: currentYear,
-            month: currentMonth,
+            name: body.name,
+            balance: body.balance,
+            currency: body.currency,
+            isCredit: body.isCredit,
+            icon: body.icon,
           },
-        },
-        create: {
-          userId: req.user.id,
-          year: currentYear,
-          month: currentMonth,
-          currency: 'USD',
-          balance: totalBalanceInUsd,
-          updateEvent: {
-            create: {
-              reason: 'CREATE_ACCOUNT',
-              totalBalance: totalBalanceInUsd,
-              accountId: newAccount.id,
-              updateAmount: newAccount.balance,
-              updateCurrency: newAccount.currency,
-            },
-          },
-        },
-        update: {
-          balance: totalBalanceInUsd,
-          updateEvent: {
-            create: {
-              reason: 'CREATE_ACCOUNT',
-              totalBalance: totalBalanceInUsd,
-              accountId: newAccount.id,
-              updateAmount: newAccount.balance,
-              updateCurrency: newAccount.currency,
-            },
-          },
-        },
-      });
+        });
 
-      return { userBalance, newAccount };
-    });
+        const userBalance = await updateTotalBalance({
+          userId: req.user.id,
+          accountId: newAccount.id,
+          reason: 'DELETE_ACCONT',
+          tx,
+          updateAmount: newAccount.balance,
+          updateCurrency: newAccount.currency,
+        });
+
+        return { userBalance, newAccount };
+      },
+      {
+        timeout: 8000,
+      },
+    );
 
     res.status(201);
-    res.json({ userBalance, newAccount });
+    res.json({ totalBalance: userBalance, account: newAccount });
   } catch (error) {
     let err: CustomError | Error = error as Error;
     let errorMessage: string = error.message;
@@ -177,7 +126,7 @@ export const updateAccount = async (
       },
     );
 
-    res.status(200).json({ updatedAccount });
+    res.status(200).json({ account: updatedAccount });
   } catch (error) {
     let err: CustomError | Error = error as Error;
     let errorMessage: string = error.message;
@@ -215,9 +164,6 @@ export const deleteAccount = async (
             fromAccount: {
               deleteMany: {},
             },
-            // toAccount: {
-            //   deleteMany: {},
-            // },
           },
         });
 
@@ -227,63 +173,13 @@ export const deleteAccount = async (
           },
         });
 
-        const allAccounts = await tx.account.findMany({
-          where: {
-            userId: req.user.id,
-          },
-        });
-
-        const convertedBalances = await Promise.all(
-          allAccounts.map(account =>
-            convertToUSD(account.currency, account.balance),
-          ),
-        );
-
-        if (convertedBalances.includes(null)) {
-          throw new Error('Failed to convert acounts balances');
-        }
-
-        const totalBalanceInUsd = convertedBalances.reduce(
-          (balance, res) => (balance += res.data.USD.value),
-          0,
-        );
-
-        const userBalance = await tx.userBalance.upsert({
-          where: {
-            BalanceUpdateIdentifier: {
-              userId: req.user.id,
-              year: currentYear,
-              month: currentMonth,
-            },
-          },
-          create: {
-            userId: req.user.id,
-            year: currentYear,
-            month: currentMonth,
-            currency: 'USD',
-            balance: totalBalanceInUsd,
-            updateEvent: {
-              create: {
-                reason: 'DELETE_ACCONT',
-                totalBalance: totalBalanceInUsd,
-                accountId: account.id,
-                updateAmount: account.balance,
-                updateCurrency: account.currency,
-              },
-            },
-          },
-          update: {
-            balance: totalBalanceInUsd,
-            updateEvent: {
-              create: {
-                reason: 'DELETE_ACCONT',
-                totalBalance: totalBalanceInUsd,
-                accountId: account.id,
-                updateAmount: account.balance,
-                updateCurrency: account.currency,
-              },
-            },
-          },
+        const userBalance = await updateTotalBalance({
+          userId: req.user.id,
+          accountId: account.id,
+          reason: 'DELETE_ACCONT',
+          tx,
+          updateAmount: account.balance,
+          updateCurrency: account.currency,
         });
 
         return { deletedAccount: account, userBalance };

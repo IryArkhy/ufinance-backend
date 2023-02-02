@@ -27,12 +27,18 @@ export const createCategory = async (
   next: NextFunction,
 ) => {
   try {
-    const categories = await prisma.category.createMany({
+    await prisma.category.createMany({
       data: req.body.categories.map(c => ({
         name: c,
         userId: req.user.id,
         type: req.body.isDefault ? 'DEFAULT' : 'CUSTOM',
       })),
+    });
+
+    const categories = await prisma.category.findMany({
+      where: {
+        userId: req.user.id,
+      },
     });
 
     res.status(201).json({ categories });

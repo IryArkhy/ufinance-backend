@@ -1,11 +1,6 @@
 export type TransactionType = 'WITHDRAWAL' | 'DEPOSIT' | 'TRANSFER';
 export const TRANSACTION_TYPES = ['WITHDRAWAL', 'DEPOSIT', 'TRANSFER'];
 
-export type GetTransactionsByAccountReqBody = {
-  offset: number;
-  limit?: number;
-};
-
 export type DepositWithdrawalReqBody = {
   fromAccountId: string;
   amount: number;
