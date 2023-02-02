@@ -39,7 +39,10 @@ export const getTransactionsByAccount = async (
         date: 'desc',
       },
       where: {
-        fromAccountId: params.accountId,
+        OR: [
+          { fromAccountId: params.accountId },
+          { toAccountId: params.accountId },
+        ],
       },
       include: {
         tags: {
@@ -49,6 +52,8 @@ export const getTransactionsByAccount = async (
         },
         category: true,
         payee: true,
+        fromAccount: true,
+        toAccount: true,
       },
     });
 
@@ -79,80 +84,6 @@ export const createTransaction = async (
     const { newTransaction, totalBalance, accountBalance } =
       await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         return await createNewTransaction(req.body, req.user.id, tx);
-        // const tagsResult = await Promise.all(
-        //   tagNames.map(
-        //     async name =>
-        //       await tx.tag.upsert({
-        //         where: {
-        //           TagIdentifier: {
-        //             userId: req.user.id,
-        //             name,
-        //           },
-        //         },
-        //         create: {
-        //           name,
-        //           userId: req.user.id,
-        //         },
-        //         update: {},
-        //       }),
-        //   ),
-        // );
-
-        // const newTransaction = await tx.transaction.create({
-        //   data: {
-        //     userId: req.user.id,
-        //     type: transactionType,
-        //     fromAccountId,
-        //     amount,
-        //     date: new Date(date),
-        //     description,
-        //     payeeId,
-        //     categoryId,
-        //     tags: {
-        //       createMany: {
-        //         data: tagsResult.map(tag => ({ tagId: tag.id })),
-        //       },
-        //     },
-        //   },
-        // });
-        // const accountWithUpdatedBalance = await tx.account.update({
-        //   where: {
-        //     id: fromAccountId,
-        //   },
-        //   data: {
-        //     balance: {
-        //       decrement: transactionType === 'WITHDRAWAL' ? amount : 0,
-        //       increment: transactionType === 'WITHDRAWAL' ? 0 : amount,
-        //     },
-        //   },
-        // });
-
-        // if (
-        //   !accountWithUpdatedBalance.isCredit &&
-        //   accountWithUpdatedBalance.balance < 0
-        // ) {
-        //   throw new Error(
-        //     'Insufficient balance. Make this account a credit one.',
-        //   );
-        // }
-
-        // const userBalance = await updateTotalBalance(
-        //   req.user.id,
-        //   'CREATE_TRANSACTION',
-        //   newTransaction.amount,
-        //   accountWithUpdatedBalance.currency,
-        //   tx,
-        //   accountWithUpdatedBalance.id,
-        // );
-
-        // return [
-        //   newTransaction,
-        //   userBalance,
-        //   {
-        //     accountId: accountWithUpdatedBalance.id,
-        //     balance: accountWithUpdatedBalance.balance,
-        //   },
-        // ];
       });
 
     res.status(200).json({
@@ -336,24 +267,39 @@ export const updateTransaction = async (
           // 4. Amount changed && Type Changed
           // withdraw 120 -> deposit 30: currentBalance + oldAmount + newAmount     ||  200 - 120 = 80 | 200 + 30 = 230 | 80 + 120 + 30 = 230
           // deposit  30  -> withdraw 40: currentBalance - oldAmount - newAmount    ||  200 + 30  = 230 | 200 - 40 = 160 | 230 - 30 - 40 = 160;
-          const tagsResult = await Promise.all(
-            tagNames.map(
-              async name =>
-                await tx.tag.upsert({
-                  where: {
-                    TagIdentifier: {
-                      userId: req.user.id,
-                      name,
-                    },
+          const tagsResult = tagNames.length
+            ? await Promise.all(
+                tagNames.map(
+                  async name =>
+                    await tx.tag.upsert({
+                      where: {
+                        TagIdentifier: {
+                          userId: req.user.id,
+                          name,
+                        },
+                      },
+                      create: {
+                        name,
+                        userId: req.user.id,
+                      },
+                      update: {},
+                    }),
+                ),
+              )
+            : [];
+
+          const tags = tagsResult.length
+            ? {
+                tags: {
+                  deleteMany: {},
+
+                  createMany: {
+                    data: tagsResult.map(tag => ({ tagId: tag.id })),
                   },
-                  create: {
-                    name,
-                    userId: req.user.id,
-                  },
-                  update: {},
-                }),
-            ),
-          );
+                },
+              }
+            : {};
+
           const updatedTransaction = await tx.transaction.update({
             where: {
               id: req.params.id,
@@ -366,11 +312,7 @@ export const updateTransaction = async (
               payeeId,
               amount,
               description,
-              tags: {
-                createMany: {
-                  data: tagsResult.map(tag => ({ tagId: tag.id })),
-                },
-              },
+              ...tags,
             },
           });
 
@@ -448,6 +390,8 @@ export const updateTransfer = async (
 ) => {
   const { body, user, params } = req;
 
+  const { fromAccountAmount, ...restBody } = body;
+
   // 1. A changed, B same, Amount Same
   // 2. A same, B changed, Amount Same
   // 3.  A same, B same, Amount changed
@@ -508,7 +452,8 @@ export const updateTransfer = async (
             id: params.id,
           },
           data: {
-            ...body,
+            ...restBody,
+            amount: fromAccountAmount,
           },
           include: {
             fromAccount: true,
@@ -695,6 +640,9 @@ export const updateTransfer = async (
         });
 
         return { transaction: updatedTransferData, totalBalance };
+      },
+      {
+        timeout: 9000,
       },
     );
 

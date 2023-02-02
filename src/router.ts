@@ -79,7 +79,7 @@ router.put(
   transactionHandlers.updateTransaction,
 ); //Update balance
 router.put(
-  '/transactions/transaction/:id',
+  '/transactions/transfer/:id',
   transactionValidators.updateTransfer,
   handleInputErrors,
   transactionHandlers.updateTransfer,
@@ -131,10 +131,15 @@ router.delete('/tags/:id', tagsHandlers.deleteTag);
  * Insights
  */
 router.get('/insights/balance', insightsHandlers.getUserBalance);
-router.get('/insights/currentMonth/balance');
-router.get('/insights/currentMonth/overview');
-router.get('/insights/currentMonth/statistics');
-router.get('/insights/currentMonth/transactions');
+router.get('/insights/currentMonth/overview', insightsHandlers.getOverview);
+router.get(
+  '/insights/currentMonth/statistics',
+  insightsHandlers.getCurrentMonthsStats,
+);
+router.get(
+  '/insights/currentMonth/transactions',
+  insightsHandlers.getCurrentMonthRecentTransactions,
+);
 
 router.use(errorLogger);
 router.use(invalidPathHandler);

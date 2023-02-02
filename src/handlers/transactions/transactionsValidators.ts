@@ -14,7 +14,7 @@ export const createTransaction = [
   body('description').optional().isString(),
   body('categorId').optional().isString(),
   body('payeeId').optional().isString(),
-  body('tagNames').optional().isArray({ min: 1 }),
+  body('tagNames').optional().isArray(),
   body('toAccountId').optional().isString(),
 ];
 
