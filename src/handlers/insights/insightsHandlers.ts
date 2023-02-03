@@ -4,7 +4,7 @@ import { Dictionary, groupBy } from 'lodash';
 
 import { prisma } from '../../db';
 import { RequestWithUser } from '../../lib/auth';
-import { convertToUAH, convertToUSD } from '../../lib/currencyApi';
+import { convertToUAH } from '../../lib/currencyApi';
 import { getCurrentMonthStartEndDate } from './utils';
 
 export const getUserBalance = async (
@@ -108,14 +108,15 @@ export const getOverview = async (
     const convertedAmmountsToUAH = await Promise.all(
       Object.entries(byCurrency).map(async ([currency, stats]) => {
         const currencyKey = currency as CURRENCY;
-        const expensesInUAH = await convertToUAH(
-          currencyKey,
-          stats.totalExpenses,
-        );
-        const earningsInUAH = await convertToUAH(
-          currencyKey,
-          stats.totalEarnings,
-        );
+        const defaultValue = { data: { UAH: { value: 0 } } };
+        const expensesInUAH =
+          stats.totalExpenses === 0
+            ? defaultValue
+            : await convertToUAH(currencyKey, stats.totalExpenses);
+        const earningsInUAH =
+          stats.totalEarnings === 0
+            ? defaultValue
+            : await convertToUAH(currencyKey, stats.totalEarnings);
 
         return {
           expensesInUAH: expensesInUAH.data.UAH.value,

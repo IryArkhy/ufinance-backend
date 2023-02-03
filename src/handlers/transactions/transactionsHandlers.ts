@@ -21,23 +21,27 @@ export const getTransactionsByAccount = async (
     { accountId: string },
     any,
     any,
-    { offset?: string; limit?: string }
+    { cursor?: string; limit?: string }
   >,
   res: Response,
   next: NextFunction,
 ) => {
   const { params, query } = req;
-  const { offset, limit } = query;
-  const pasedOffset = offset ? parseInt(offset) : 0;
+  const { cursor, limit } = query;
   const pasedLimit = limit ? parseInt(limit) : 20;
 
   try {
     const transactions = await prisma.transaction.findMany({
-      skip: pasedOffset,
+      skip: 1,
       take: pasedLimit,
-      orderBy: {
-        date: 'desc',
-      },
+      ...(cursor
+        ? {
+            cursor: {
+              id: cursor,
+            },
+          }
+        : {}),
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
       where: {
         OR: [
           { fromAccountId: params.accountId },
@@ -59,16 +63,18 @@ export const getTransactionsByAccount = async (
 
     const count = await prisma.transaction.count({
       where: {
-        fromAccountId: params.accountId,
+        OR: [
+          { fromAccountId: params.accountId },
+          { toAccountId: params.accountId },
+        ],
       },
     });
 
-    const newOffset = pasedOffset + pasedLimit;
-
     res.status(200).json({
       transactions,
-      limit,
-      offset: newOffset > count ? null : newOffset,
+      limit: pasedLimit,
+      cursor,
+      count,
     });
   } catch (error) {
     next(error);
@@ -82,9 +88,12 @@ export const createTransaction = async (
 ) => {
   try {
     const { newTransaction, totalBalance, accountBalance } =
-      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        return await createNewTransaction(req.body, req.user.id, tx);
-      });
+      await prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          return await createNewTransaction(req.body, req.user.id, tx);
+        },
+        { timeout: 10 * 1000 },
+      );
 
     res.status(200).json({
       transaction: newTransaction,
@@ -124,6 +133,17 @@ export const createTransfer = async (
             date: new Date(date),
             description,
           },
+          include: {
+            fromAccount: true,
+            toAccount: true,
+            tags: {
+              include: {
+                tag: true,
+              },
+            },
+            category: true,
+            payee: true,
+          },
         });
         const fromAccount = await tx.account.update({
           where: {
@@ -154,6 +174,9 @@ export const createTransfer = async (
         });
 
         return { newTransaction, fromAccount, toAccount };
+      },
+      {
+        timeout: 10 * 1000,
       },
     );
 
@@ -314,6 +337,17 @@ export const updateTransaction = async (
               description,
               ...tags,
             },
+            include: {
+              fromAccount: true,
+              toAccount: true,
+              category: true,
+              payee: true,
+              tags: {
+                include: {
+                  tag: true,
+                },
+              },
+            },
           });
 
           const account = await tx.account.findUnique({
@@ -372,6 +406,7 @@ export const updateTransaction = async (
           };
         }
       },
+      { timeout: 10 * 1000 },
     );
 
     res.status(200).json({
@@ -392,68 +427,12 @@ export const updateTransfer = async (
 
   const { fromAccountAmount, ...restBody } = body;
 
-  // 1. A changed, B same, Amount Same
-  // 2. A same, B changed, Amount Same
-  // 3.  A same, B same, Amount changed
-  // 4.  A canged, B same, Amount changed
-  // 5.  A same, B changed, Amount changed
-  // 6.  A changed, B changed, Amount changed
-
-  /**
-   * if(Amount Same)  {
-   *    if(A same && B same) return;
-   *    if (A same & B changed) {
-   *        // rollback B.balance ( - transfer amount)
-   *        // update new B.balance (+ transfer amount)
-   *    }
-   *
-   *    if(A changed & B same) {
-   *        // rollback A.balance (+ transfer amount)
-   *        // update new A.balance (- transfer amount)
-   *    }
-   * } else {
-   *    if(A same & B same) {
-   *        1. A.balance + oldAmount - newAmount
-   *        2. B.balance - oldAmount + newAmount
-   *    }
-   *
-   *    if(A changed, B same) {
-   *        1. rollback A.balance (+ oldAmount)
-   *        2. new A.balance - newAmount
-   *        3. update B.balance - oldAmount + newAmount
-   *    }
-   *
-   *    if(A same, B changed) {
-   *        1. rollback B.balance (- oldAmount)
-   *        2. new B.balance + newAmount
-   *        3. A.balance + oldAmount - newAmount
-   *    }
-   *
-   *    if(A changed, B changed) {
-   *        1. rollback A.balance (+ oldAmount)
-   *        2. rollback B.balance (- oldAmount)
-   *        3. new A.balance - newAmount
-   *        4. new B.balance + newAmount
-   *    }
-   * }
-   */
-
   try {
-    const { transaction, totalBalance } = await prisma.$transaction(
+    const { transaction } = await prisma.$transaction(
       async tx => {
-        const oldTransferData = await tx.transaction.findUnique({
+        const deletedTransaction = await tx.transaction.delete({
           where: {
             id: params.id,
-          },
-        });
-
-        const updatedTransferData = await tx.transaction.update({
-          where: {
-            id: params.id,
-          },
-          data: {
-            ...restBody,
-            amount: fromAccountAmount,
           },
           include: {
             fromAccount: true,
@@ -461,194 +440,110 @@ export const updateTransfer = async (
           },
         });
 
-        const {
-          amount: oldFromAccountAmount,
-          fromAccountId: oldSendingAccount,
-          toAccountId: oldReceivingAccount,
-          toAccountAmount: oldToAccountAmount,
-        } = oldTransferData;
-        const {
-          amount: newFromAccountAmount,
-          fromAccountId: newSendingAccount,
-          toAccountId: newReceivingAccount,
-          toAccountAmount: newToAccountAmount,
-        } = updatedTransferData;
-
-        const isAmountChanged =
-          oldFromAccountAmount === newFromAccountAmount &&
-          oldToAccountAmount === newToAccountAmount;
-
-        const isSendingAccountChanged = oldSendingAccount !== newSendingAccount;
-        const isReceivingAccountChanged =
-          oldReceivingAccount !== newReceivingAccount;
-
-        if (isAmountChanged) {
-          if (isSendingAccountChanged && !isReceivingAccountChanged) {
-            const oldSendAccount = await updateAccountBalance(
-              oldSendingAccount,
-              'DEPOSIT',
-              oldFromAccountAmount,
-              tx,
-            );
-
-            const newSendAccount = await updateAccountBalance(
-              newSendingAccount,
-              'WITHDRAWAL',
-              newFromAccountAmount,
-              tx,
-            );
-          }
-
-          if (!isSendingAccountChanged && isReceivingAccountChanged) {
-            const oldResAccount = await updateAccountBalance(
-              oldReceivingAccount,
-              'WITHDRAWAL',
-              oldToAccountAmount,
-              tx,
-            );
-
-            const newResAccount = await updateAccountBalance(
-              newReceivingAccount,
-              'DEPOSIT',
-              newToAccountAmount,
-              tx,
-            );
-          }
-        } else {
-          if (!isSendingAccountChanged && !isReceivingAccountChanged) {
-            // *    if(A same & B same) {
-            // *        1. A.balance + oldAmount - newAmount
-            // *        2. B.balance - oldAmount + newAmount
-            // *    }
-            // *
-            const oldSendAccount = await updateAccountBalance(
-              oldSendingAccount,
-              'WITHDRAWAL',
-              oldFromAccountAmount + newFromAccountAmount,
-              tx,
-            );
-            const oldResAccount = await updateAccountBalance(
-              oldReceivingAccount,
-              'DEPOSIT',
-              oldFromAccountAmount - newFromAccountAmount,
-              tx,
-            );
-          }
-
-          if (isSendingAccountChanged && !isReceivingAccountChanged) {
-            // *    if(A changed, B same) {
-            // *        1. rollback A.balance (+ oldAmount)
-            // *        2. new A.balance - newAmount
-            // *        3. update B.balance - oldAmount + newAmount
-            // *    }
-            // *
-
-            const oldSendAccount = await updateAccountBalance(
-              oldSendingAccount,
-              'DEPOSIT',
-              oldFromAccountAmount,
-              tx,
-            );
-
-            const newSendAccount = await updateAccountBalance(
-              newSendingAccount,
-              'WITHDRAWAL',
-              newFromAccountAmount,
-              tx,
-            );
-
-            const oldResAccount = await updateAccountBalance(
-              oldReceivingAccount,
-              'WITHDRAWAL',
-              oldToAccountAmount + newToAccountAmount,
-              tx,
-            );
-          }
-
-          if (!isSendingAccountChanged && isReceivingAccountChanged) {
-            // *    if(A same, B changed) {
-            // *        1. rollback B.balance (- oldAmount)
-            // *        2. new B.balance + newAmount
-            // *        3. A.balance + oldAmount - newAmount
-            // *    }
-            const oldResAccount = await updateAccountBalance(
-              oldReceivingAccount,
-              'WITHDRAWAL',
-              oldToAccountAmount,
-              tx,
-            );
-
-            const newResAccount = await updateAccountBalance(
-              newReceivingAccount,
-              'DEPOSIT',
-              newToAccountAmount,
-              tx,
-            );
-
-            const oldSendAccount = await updateAccountBalance(
-              oldSendingAccount,
-              'DEPOSIT',
-              oldFromAccountAmount - newFromAccountAmount,
-              tx,
-            );
-          }
-
-          if (isSendingAccountChanged && isReceivingAccountChanged) {
-            // *    if(A changed, B changed) {
-            // *        1. rollback A.balance (+ oldAmount)
-            // *        2. rollback B.balance (- oldAmount)
-            // *        3. new A.balance - newAmount
-            // *        4. new B.balance + newAmount
-            // *    }
-            const oldSendAccount = await updateAccountBalance(
-              oldSendingAccount,
-              'DEPOSIT',
-              oldFromAccountAmount,
-              tx,
-            );
-
-            const oldResAccount = await updateAccountBalance(
-              oldReceivingAccount,
-              'WITHDRAWAL',
-              oldToAccountAmount,
-              tx,
-            );
-
-            const newSendAccount = await updateAccountBalance(
-              newSendingAccount,
-              'WITHDRAWAL',
-              newFromAccountAmount,
-              tx,
-            );
-
-            const newResAccount = await updateAccountBalance(
-              newReceivingAccount,
-              'DEPOSIT',
-              newToAccountAmount,
-              tx,
-            );
-          }
-        }
-
-        const totalBalance = updateTotalBalance({
-          userId: req.user.id,
-          reason: 'UPDATE_TRANSACTION',
-          updateAmount: updatedTransferData.amount,
-          updateCurrency: updatedTransferData.fromAccount.currency,
-          transactionId: updatedTransferData.id,
-          tx: tx,
+        const oldFromAccount = await tx.account.update({
+          where: {
+            id: deletedTransaction.fromAccountId,
+          },
+          data: {
+            balance: {
+              increment: deletedTransaction.amount,
+            },
+          },
         });
 
-        return { transaction: updatedTransferData, totalBalance };
+        if (!oldFromAccount.isCredit && oldFromAccount.balance < 0) {
+          throw new Error(
+            'Insufficient balance. Make this account a credit one.',
+          );
+        }
+
+        const oldToAccount = await tx.account.update({
+          where: {
+            id: deletedTransaction.toAccountId,
+          },
+          data: {
+            balance: {
+              decrement: deletedTransaction.toAccountAmount,
+            },
+          },
+        });
+
+        const newTransfer = await tx.transaction.create({
+          data: {
+            userId: user.id,
+            amount: fromAccountAmount,
+            ...restBody,
+            type: 'TRANSFER',
+          },
+          include: {
+            fromAccount: true,
+            toAccount: true,
+            tags: {
+              include: {
+                tag: true,
+              },
+            },
+            category: true,
+            payee: true,
+          },
+        });
+
+        // const {
+        //   amount: oldFromAccountAmount,
+        //   fromAccountId: oldSendingAccount,
+        //   toAccountId: oldReceivingAccount,
+        //   toAccountAmount: oldToAccountAmount,
+        // } = oldTransferData;
+        // const {
+        //   amount: newFromAccountAmount,
+        //   fromAccountId: newSendingAccount,
+        //   toAccountId: newReceivingAccount,
+        //   toAccountAmount: newToAccountAmount,
+        // } = updatedTransferData;
+
+        // const isAmountChanged =
+        //   oldFromAccountAmount === newFromAccountAmount &&
+        //   oldToAccountAmount === newToAccountAmount;
+
+        // const isSendingAccountChanged = oldSendingAccount !== newSendingAccount;
+        // const isReceivingAccountChanged =
+        //   oldReceivingAccount !== newReceivingAccount;
+
+        const fromAccount = await tx.account.update({
+          where: {
+            id: newTransfer.fromAccountId,
+          },
+          data: {
+            balance: {
+              decrement: newTransfer.amount,
+            },
+          },
+        });
+
+        if (!fromAccount.isCredit && fromAccount.balance < 0) {
+          throw new Error(
+            'Insufficient balance. Make this account a credit one.',
+          );
+        }
+
+        const toAccount = await tx.account.update({
+          where: {
+            id: newTransfer.toAccountId,
+          },
+          data: {
+            balance: {
+              increment: newTransfer.toAccountAmount,
+            },
+          },
+        });
+
+        return { transaction: newTransfer };
       },
-      {
-        timeout: 9000,
-      },
+      { timeout: 10 * 1000 },
     );
 
     res.status(200).json({
       transaction,
-      totalBalance,
     });
   } catch (error) {
     next(error);
@@ -661,7 +556,7 @@ export const deleteTransaction = async (
   next: NextFunction,
 ) => {
   try {
-    const { transaction, totalBalance } = await prisma.$transaction(
+    const { transaction, updatedAccount } = await prisma.$transaction(
       async tx => {
         await tx.transaction.update({
           where: {
@@ -689,7 +584,7 @@ export const deleteTransaction = async (
           },
         });
 
-        await updateAccountBalance(
+        const updatedAccount = await updateAccountBalance(
           req.params.accountId,
           deletedTransaction.type === 'DEPOSIT' ? 'WITHDRAWAL' : 'DEPOSIT',
           deletedTransaction.amount,
@@ -705,13 +600,14 @@ export const deleteTransaction = async (
           tx: tx,
         });
 
-        return { transaction: deleteTransaction, totalBalance };
+        return { transaction: deletedTransaction, updatedAccount };
       },
+      { timeout: 10 * 1000 },
     );
 
     res.status(200).json({
       transaction,
-      totalBalance,
+      updatedAccount,
     });
   } catch (error) {
     next(error);
@@ -724,7 +620,7 @@ export const deleteTransfer = async (
   next: NextFunction,
 ) => {
   try {
-    const { transaction, totalBalance } = await prisma.$transaction(
+    const { transaction, fromAccount, toAccount } = await prisma.$transaction(
       async tx => {
         const deletedTransaction = await tx.transaction.delete({
           where: {
@@ -739,13 +635,13 @@ export const deleteTransfer = async (
           },
         });
 
-        await updateAccountBalance(
+        const fromAccount = await updateAccountBalance(
           deletedTransaction.fromAccountId,
           'DEPOSIT',
           deletedTransaction.amount,
           tx,
         );
-        await updateAccountBalance(
+        const toAccount = await updateAccountBalance(
           deletedTransaction.toAccountId,
           'WITHDRAWAL',
           deletedTransaction.toAccountAmount,
@@ -761,13 +657,15 @@ export const deleteTransfer = async (
           tx: tx,
         });
 
-        return { transaction: deleteTransaction, totalBalance };
+        return { transaction: deletedTransaction, fromAccount, toAccount };
       },
+      { timeout: 10 * 1000 },
     );
 
     res.status(200).json({
       transaction,
-      totalBalance,
+      fromAccount,
+      toAccount,
     });
   } catch (error) {
     next(error);

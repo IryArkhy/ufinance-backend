@@ -18,25 +18,14 @@ export const createNewTransaction = async (
     categoryId,
   } = data;
 
-  const tagsResult = tagNames.length
-    ? await Promise.all(
-        tagNames.map(
-          async name =>
-            await tx.tag.upsert({
-              where: {
-                TagIdentifier: {
-                  userId,
-                  name,
-                },
-              },
-              create: {
-                name,
-                userId,
-              },
-              update: {},
-            }),
-        ),
-      )
+  const tags = tagNames.length
+    ? await tx.tag.findMany({
+        where: {
+          OR: tagNames.map(name => ({
+            name,
+          })),
+        },
+      })
     : [];
 
   const newTransaction = await tx.transaction.create({
@@ -49,10 +38,10 @@ export const createNewTransaction = async (
       description,
       payeeId,
       categoryId,
-      tags: tagsResult.length
+      tags: tags.length
         ? {
             createMany: {
-              data: tagsResult.map(tag => ({ tagId: tag.id })),
+              data: tags.map(tag => ({ tagId: tag.id })),
             },
           }
         : undefined,
@@ -65,6 +54,8 @@ export const createNewTransaction = async (
       },
       category: true,
       payee: true,
+      fromAccount: true,
+      toAccount: true,
     },
   });
 

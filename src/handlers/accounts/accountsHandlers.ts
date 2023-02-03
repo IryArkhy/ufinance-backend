@@ -184,6 +184,7 @@ export const deleteAccount = async (
 
         return { deletedAccount: account, userBalance };
       },
+      { timeout: 10 * 1000 },
     );
 
     res.status(200).json({ deletedAccount, userBalance });
