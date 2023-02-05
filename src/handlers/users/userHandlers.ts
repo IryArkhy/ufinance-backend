@@ -44,6 +44,18 @@ export const createNewUser = async (
 
       await createDefaultCategories(newUser.id, tx);
 
+      const dateNow = new Date();
+      const currentMonth = dateNow.getMonth();
+      const currentYear = dateNow.getFullYear();
+
+      await tx.userBalance.create({
+        data: {
+          month: currentMonth,
+          year: currentYear,
+          userId: newUser.id,
+        },
+      });
+
       return newUser;
     });
 

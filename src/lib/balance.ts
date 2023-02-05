@@ -27,10 +27,19 @@ type UpdateAccountData = {
 export const updateTotalBalance = async (
   data: UpdateAccountData,
 ): Promise<UserBalance> => {
+  const {
+    userId,
+    reason,
+    updateAmount,
+    updateCurrency,
+    tx,
+    accountId,
+    transactionId,
+  } = data;
+
   const dateNow = new Date();
   const currentMonth = dateNow.getMonth();
   const currentYear = dateNow.getFullYear();
-  const { userId, reason, updateAmount, updateCurrency, tx, accountId } = data;
 
   const allAccounts = await tx.account.findMany({
     where: {
@@ -80,6 +89,7 @@ export const updateTotalBalance = async (
           updateAmount: updateAmount,
           updateCurrency: updateCurrency,
           accountId,
+          transactionId,
         },
       },
     },
@@ -92,6 +102,7 @@ export const updateTotalBalance = async (
           updateAmount: updateAmount,
           updateCurrency: updateCurrency,
           accountId,
+          transactionId,
         },
       },
     },
