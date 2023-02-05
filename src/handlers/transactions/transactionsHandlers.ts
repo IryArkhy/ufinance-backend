@@ -1,6 +1,5 @@
-import { Account, Prisma, PrismaClient, UserBalance } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime';
-import { NextFunction, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
+import { NextFunction, Response } from 'express';
 import { prisma } from '../../db';
 import { RequestWithUser } from '../../lib/auth';
 import { updateTotalBalance } from '../../lib/balance';
@@ -222,19 +221,6 @@ export const updateTransaction = async (
     transactionType,
   } = req.body;
 
-  // Cases
-  // 1. Account changed
-  //    -> delete transaction from old balance
-  //    -> create a new Transaction for a new Account
-  // 2. Amount changed
-  //    -> calculate the difference
-  //    -> update account balance
-  //    -> update total balance
-  // 3. Amount changed & Account changed
-  //    -> delete transaction from old balance
-  //    -> create a new Transaction for a new Account
-  //    -> update total balance
-
   try {
     const result = await prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
@@ -286,41 +272,6 @@ export const updateTransaction = async (
             totalBalance,
           };
         } else {
-          // 1. Amount same && Transaction Type Same -> do nothing with account
-          // 2. Amount changed && Type Same -> calculate difference, update account
-          // -> If deposit: (balance - oldAmount + newAmount)
-          // newAmount > oldAmount -> currentBalance - oldAmount + newAmount; 120 + 13 = 133 | 120 + 20 = 140; 133 - 13 + 30 = 120 + 20 = 140
-          // newAmount < oldAmount -> currentBalance - oldAmount + newAmount; 120 + 20 = 140 | 120 + 13 = 133; 140 - 20 + 13 = 133;
-          // -> If withdrawal: (balance + oldAmount - newAmount)
-          // newAmount > oldAmount; currentBalance + oldAmount - newAmount   || 120 - (15) = 105; 120 - (30) = 90 |  105 + 15 - 30 = 120 - 30 = 90;
-          // newAmount < oldAmount; currentBalance + oldAmount - newAmount || 120 - (30) = 90 | 120 - (15) = 105; 90 + 30 - 15 = 120 - 15 = 105;
-          // 3. Amount same && Type Changed
-          // -> Was deposit: currentBalance - amount * 2; 120 + 30 = 150 ; 120 - 30 = 90 | 150 - 30 * 2 = 150 - 60 = 90
-          // -> Was withdrawal: currentBalance + amount * 2;     120 - 30 = 90 ; 120 + 30 = 150 | 90 + 30 * 2 = 150;
-          // 4. Amount changed && Type Changed
-          // withdraw 120 -> deposit 30: currentBalance + oldAmount + newAmount     ||  200 - 120 = 80 | 200 + 30 = 230 | 80 + 120 + 30 = 230
-          // deposit  30  -> withdraw 40: currentBalance - oldAmount - newAmount    ||  200 + 30  = 230 | 200 - 40 = 160 | 230 - 30 - 40 = 160;
-          // const tagsResult = tagNames.length
-          //   ? await Promise.all(
-          //       tagNames.map(
-          //         async name =>
-          //           await tx.tag.upsert({
-          //             where: {
-          //               TagIdentifier: {
-          //                 userId: req.user.id,
-          //                 name,
-          //               },
-          //             },
-          //             create: {
-          //               name,
-          //               userId: req.user.id,
-          //             },
-          //             update: {},
-          //           }),
-          //       ),
-          //     )
-          //   : [];
-
           const tagsResult = tagNames.length
             ? await tx.tag.findMany({
                 where: {
@@ -401,12 +352,6 @@ export const updateTransaction = async (
               balance: newBalance,
             },
           });
-
-          // 80 -> 75 | delta = -5: 75 - 80 = -5
-          // -80 -> 20 | delta = 100: 20 - -80 = 100
-          // 80 -> -5 | delta = -85: -5 - 80 = -85
-          // -80 -> -5 | delta = 75: -5 - -80 = 75
-          // ---> newBalance - oldBalance
 
           const accountBalanceDelta = account.balance - newBalance;
 
@@ -506,27 +451,6 @@ export const updateTransfer = async (
             payee: true,
           },
         });
-
-        // const {
-        //   amount: oldFromAccountAmount,
-        //   fromAccountId: oldSendingAccount,
-        //   toAccountId: oldReceivingAccount,
-        //   toAccountAmount: oldToAccountAmount,
-        // } = oldTransferData;
-        // const {
-        //   amount: newFromAccountAmount,
-        //   fromAccountId: newSendingAccount,
-        //   toAccountId: newReceivingAccount,
-        //   toAccountAmount: newToAccountAmount,
-        // } = updatedTransferData;
-
-        // const isAmountChanged =
-        //   oldFromAccountAmount === newFromAccountAmount &&
-        //   oldToAccountAmount === newToAccountAmount;
-
-        // const isSendingAccountChanged = oldSendingAccount !== newSendingAccount;
-        // const isReceivingAccountChanged =
-        //   oldReceivingAccount !== newReceivingAccount;
 
         const fromAccount = await tx.account.update({
           where: {

@@ -2,18 +2,6 @@ import { CURRENCY as PrismaCurrency } from '@prisma/client';
 import fetch from 'node-fetch';
 import config from '../config';
 
-// type ConvertCurrencyResponse = {
-//   meta: {
-//     last_updated_at: string;
-//   };
-//   data: {
-//     [Key in PrismaCurrency]: {
-//       code: Key;
-//       value: number;
-//     };
-//   };
-// };
-
 type ConvertCurrencyToUSDResponse = {
   meta: {
     last_updated_at: string;

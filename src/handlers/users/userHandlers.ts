@@ -1,6 +1,5 @@
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime';
 import { NextFunction, Request, Response } from 'express';
-import { userHandlers } from '.';
 
 import { prisma } from '../../db';
 import {

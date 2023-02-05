@@ -34,16 +34,6 @@ export const createAccount = async (
 ) => {
   const { body } = req;
 
-  // 1. Create a new account
-  // 2. Fetch all accounts
-  // 4. Convert all accounts balances to USD
-  // 5. Find or Create account balance for current months and create BalanceUpdateEvent
-  // 7. Return Account & Total Balance
-
-  const dateNow = new Date();
-  const currentMonth = dateNow.getMonth();
-  const currentYear = dateNow.getFullYear();
-
   try {
     const { userBalance, newAccount } = await prisma.$transaction<{
       userBalance: UserBalance;

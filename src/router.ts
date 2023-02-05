@@ -65,33 +65,33 @@ router.post(
   transactionValidators.createTransaction,
   handleInputErrors,
   transactionHandlers.createTransaction,
-); //Update balance
+);
 router.post(
   '/transactions/transfer',
   transactionValidators.createTransfer,
   handleInputErrors,
   transactionHandlers.createTransfer,
-); //Update balance
+);
 router.put(
   '/transactions/:id',
   transactionValidators.updateTransaction,
   handleInputErrors,
   transactionHandlers.updateTransaction,
-); //Update balance
+);
 router.put(
   '/transactions/transfer/:id',
   transactionValidators.updateTransfer,
   handleInputErrors,
   transactionHandlers.updateTransfer,
-); //Update balance
+);
 router.delete(
   '/transactions/:accountId/:id',
   transactionHandlers.deleteTransaction,
-); //Update balance
+);
 router.delete(
   '/transactions/transfer/:accountId/:id',
   transactionHandlers.deleteTransfer,
-); //Update balance
+);
 
 /**
  * Categories
