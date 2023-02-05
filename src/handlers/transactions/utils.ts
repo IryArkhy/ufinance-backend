@@ -28,6 +28,8 @@ export const createNewTransaction = async (
       })
     : [];
 
+  console.log(JSON.stringify({ transactionType, amount }, null, 2));
+
   const newTransaction = await tx.transaction.create({
     data: {
       userId,
@@ -70,6 +72,8 @@ export const createNewTransaction = async (
           : { increment: amount },
     },
   });
+
+  console.log(JSON.stringify({ newTransaction }, null, 2));
 
   if (
     !accountWithUpdatedBalance.isCredit &&

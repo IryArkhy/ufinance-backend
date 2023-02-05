@@ -50,6 +50,7 @@ export const createAccount = async (
       newAccount: Account;
     }>(
       async (tx: Prisma.TransactionClient) => {
+        console.log({ userId: req.user.id });
         const newAccount = await tx.account.create({
           data: {
             userId: req.user.id,

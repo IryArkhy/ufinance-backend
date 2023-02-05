@@ -16,12 +16,20 @@ export const getUserBalance = async (
     const dateNow = new Date();
     const currentMonth = dateNow.getMonth();
     const currentYear = dateNow.getFullYear();
-    const balance = await prisma.userBalance.findFirstOrThrow({
+    const balance = await prisma.userBalance.upsert({
       where: {
+        BalanceUpdateIdentifier: {
+          month: currentMonth,
+          year: currentYear,
+          userId: req.user.id,
+        },
+      },
+      create: {
         month: currentMonth,
         year: currentYear,
         userId: req.user.id,
       },
+      update: {},
     });
 
     res.status(200).json({ balance });

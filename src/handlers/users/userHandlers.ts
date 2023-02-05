@@ -50,7 +50,7 @@ export const createNewUser = async (
     const token = createJWT({ id: user.id, role: user.role });
 
     res.status(201);
-    res.json({ token });
+    res.json({ token, user });
   } catch (error) {
     let err: CustomError | Error = error;
     if (error instanceof PrismaClientKnownRequestError) {
@@ -94,6 +94,7 @@ export const signIn = async (
 
     res.status(200).json({
       token,
+      user,
     });
   } catch (error) {
     next(error);

@@ -32,7 +32,7 @@ export const getTransactionsByAccount = async (
 
   try {
     const transactions = await prisma.transaction.findMany({
-      skip: 1,
+      skip: cursor ? 1 : 0,
       take: pasedLimit,
       ...(cursor
         ? {
@@ -62,6 +62,16 @@ export const getTransactionsByAccount = async (
     });
 
     const count = await prisma.transaction.count({
+      skip: 1,
+      take: pasedLimit,
+      ...(cursor
+        ? {
+            cursor: {
+              id: cursor,
+            },
+          }
+        : {}),
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
       where: {
         OR: [
           { fromAccountId: params.accountId },
@@ -290,32 +300,41 @@ export const updateTransaction = async (
           // 4. Amount changed && Type Changed
           // withdraw 120 -> deposit 30: currentBalance + oldAmount + newAmount     ||  200 - 120 = 80 | 200 + 30 = 230 | 80 + 120 + 30 = 230
           // deposit  30  -> withdraw 40: currentBalance - oldAmount - newAmount    ||  200 + 30  = 230 | 200 - 40 = 160 | 230 - 30 - 40 = 160;
+          // const tagsResult = tagNames.length
+          //   ? await Promise.all(
+          //       tagNames.map(
+          //         async name =>
+          //           await tx.tag.upsert({
+          //             where: {
+          //               TagIdentifier: {
+          //                 userId: req.user.id,
+          //                 name,
+          //               },
+          //             },
+          //             create: {
+          //               name,
+          //               userId: req.user.id,
+          //             },
+          //             update: {},
+          //           }),
+          //       ),
+          //     )
+          //   : [];
+
           const tagsResult = tagNames.length
-            ? await Promise.all(
-                tagNames.map(
-                  async name =>
-                    await tx.tag.upsert({
-                      where: {
-                        TagIdentifier: {
-                          userId: req.user.id,
-                          name,
-                        },
-                      },
-                      create: {
-                        name,
-                        userId: req.user.id,
-                      },
-                      update: {},
-                    }),
-                ),
-              )
+            ? await tx.tag.findMany({
+                where: {
+                  OR: tagNames.map(name => ({
+                    name,
+                  })),
+                },
+              })
             : [];
 
           const tags = tagsResult.length
             ? {
                 tags: {
                   deleteMany: {},
-
                   createMany: {
                     data: tagsResult.map(tag => ({ tagId: tag.id })),
                   },

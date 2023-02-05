@@ -30,7 +30,7 @@ model Account {
   id                 String               @id @default(auto()) @map("_id") @db.ObjectId
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
-  name               String               @unique
+  name               String               
   balance            Float                @default(0.00)
   currency           CURRENCY             @default(UAH)
   isCredit           Boolean              @default(false)
